@@ -21,10 +21,11 @@ import {
   Check,
   Loader2,
   Settings,
+  Lock,
 } from 'lucide-react';
 import { Booking, ConsultantProfile } from '../types';
 import { createGoogleCalendarUrl, createGmailComposeUrl, downloadIcsFile } from '../utils/calendarUtils';
-import { getStoredEmailSettings, saveEmailSettings, EmailSettings } from '../utils/storage';
+import { getStoredEmailSettings, saveEmailSettings, EmailSettings, getStoredHostPin, saveHostPin } from '../utils/storage';
 import { sendTestEmail, SendEmailResult } from '../utils/emailService';
 
 interface AdminDashboardProps {
@@ -34,6 +35,7 @@ interface AdminDashboardProps {
   onDeleteBooking: (id: string) => void;
   onPreviewEmail: (booking: Booking) => void;
   onSwitchToBooking: () => void;
+  onHostLogout?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -43,6 +45,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteBooking,
   onPreviewEmail,
   onSwitchToBooking,
+  onHostLogout,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'cancelled'>('all');
@@ -55,6 +58,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<SendEmailResult | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Host PIN state
+  const [hostPinInput, setHostPinInput] = useState(getStoredHostPin());
+  const [hostPinSaved, setHostPinSaved] = useState(false);
+
+  const handleSaveHostPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hostPinInput.trim()) return;
+    saveHostPin(hostPinInput.trim());
+    setHostPinSaved(true);
+    setTimeout(() => setHostPinSaved(false), 3000);
+  };
 
   const filteredBookings = bookings.filter((b) => {
     const matchesSearch =
@@ -128,11 +143,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               type="button"
               onClick={onSwitchToBooking}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1.5"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Calendar className="w-4 h-4" />
               <span>Open Public Booking View</span>
             </button>
+
+            {onHostLogout && (
+              <button
+                type="button"
+                onClick={onHostLogout}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-200 border border-slate-700/80 transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+                title="Lock Host Portal and return to public view"
+              >
+                <Lock className="w-4 h-4 text-rose-400" />
+                <span>Lock / Exit Host Mode</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -281,6 +308,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Host Access Security & PIN Settings Card */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Host Access Security &amp; PIN</h3>
+              <p className="text-xs text-slate-400">
+                Only you can access this Admin Dashboard, booking attendee lists, and email credentials
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" /> Protected with PIN
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+          <form onSubmit={handleSaveHostPin} className="space-y-3">
+            <div>
+              <label className="block font-semibold text-slate-200 mb-1.5">
+                Change Host Security PIN
+              </label>
+              <input
+                type="text"
+                value={hostPinInput}
+                onChange={(e) => setHostPinInput(e.target.value)}
+                placeholder="4-digit PIN (default 1993)"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono text-sm tracking-widest focus:outline-none focus:border-indigo-500"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                This PIN is required to unlock this dashboard. Default is <strong className="text-white font-mono">1993</strong>.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-md"
+            >
+              {hostPinSaved ? <Check className="w-4 h-4 text-emerald-300" /> : <Lock className="w-4 h-4" />}
+              <span>{hostPinSaved ? 'PIN Saved!' : 'Update Host PIN'}</span>
+            </button>
+          </form>
+
+          <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2 text-slate-300 text-[11px] leading-relaxed">
+            <span className="font-bold text-white block">Visitor Privacy Assurance:</span>
+            <p>
+              When clients or prospects open your booking calendar link, this Admin Dashboard, all attendee emails, and credentials are completely hidden from view.
+            </p>
+            <p>
+              To access your dashboard anytime on a new device or browser, click the subtle lock icon in the header or footer and enter your PIN, or append <code className="text-indigo-300 font-mono">?pin=1993</code> to your URL.
+            </p>
           </div>
         </div>
       </div>

@@ -1,30 +1,35 @@
-import React, { useState, useMemo, useEffect } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
   Video,
-  Sparkles,
   ShieldCheck,
-  CheckCircle2,
-  Share2,
-  ChevronRight,
-  Terminal,
-  Linkedin,
-  Mail,
   Award,
-  Layers,
   Users,
   Compass,
+  ArrowRight,
+  Mail,
+  Share2,
+  Terminal,
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
 
 import { TimeSlot, Booking, ConsultantProfile } from './types';
 import { generateSlotsForDate } from './utils/slotGenerator';
 import {
-  getStoredProfile,
   getStoredBookings,
+  getStoredProfile,
   saveBooking,
   cancelBooking,
   deleteBooking,
+  getStoredHostAuth,
+  setStoredHostAuth,
 } from './utils/storage';
 
 import { Header, TIMEZONES } from './components/Header';
@@ -36,11 +41,25 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { EmailModal } from './components/EmailModal';
 import { ShareModal } from './components/ShareModal';
 import { VercelGuideModal } from './components/VercelGuideModal';
+import { HostLoginModal } from './components/HostLoginModal';
 
 export default function App() {
   const [profile] = useState<ConsultantProfile>(getStoredProfile);
   const [bookings, setBookings] = useState<Booking[]>(getStoredBookings);
   const [activeTab, setActiveTab] = useState<'booking' | 'admin'>('booking');
+
+  // Host access control (only Ramesh J has access to Admin Dashboard)
+  const [isHostAuthenticated, setIsHostAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    const pinParam = urlParams.get('pin') || urlParams.get('admin');
+    if (pinParam === '1993' || pinParam === 'true') {
+      setStoredHostAuth(true);
+      return true;
+    }
+    return getStoredHostAuth();
+  });
+  const [isHostLoginModalOpen, setIsHostLoginModalOpen] = useState(false);
 
   // Timezone selection
   const [selectedTimeZone, setSelectedTimeZone] = useState<string>('Asia/Kolkata');
@@ -64,9 +83,9 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isVercelGuideOpen, setIsVercelGuideOpen] = useState(false);
 
-  // Re-generate available slots whenever selectedDate or bookings change
-  const availableSlots = useMemo(() => {
-    return generateSlotsForDate(selectedDate, bookings, new Date());
+  // Generate slots dynamically for the selected date
+  const dateSlots = useMemo(() => {
+    return generateSlotsForDate(selectedDate, bookings);
   }, [selectedDate, bookings]);
 
   // Handle slot selection
@@ -101,6 +120,18 @@ export default function App() {
     setBookingStep('select');
   };
 
+  const handleHostLogout = () => {
+    setIsHostAuthenticated(false);
+    setStoredHostAuth(false);
+    setActiveTab('booking');
+  };
+
+  const handleHostLoginSuccess = () => {
+    setIsHostAuthenticated(true);
+    setStoredHostAuth(true);
+    setActiveTab('admin');
+  };
+
   const timeZoneLabel = TIMEZONES.find((t) => t.value === selectedTimeZone)?.label || selectedTimeZone;
 
   return (
@@ -115,19 +146,51 @@ export default function App() {
         onOpenShareModal={() => setIsShareModalOpen(true)}
         onOpenVercelGuide={() => setIsVercelGuideOpen(true)}
         bookingCount={bookings.filter((b) => b.status === 'confirmed').length}
+        isHostAuthenticated={isHostAuthenticated}
+        onHostLogout={handleHostLogout}
+        onOpenHostLogin={() => setIsHostLoginModalOpen(true)}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'admin' ? (
-          <AdminDashboard
-            bookings={bookings}
-            profile={profile}
-            onCancelBooking={handleCancelBooking}
-            onDeleteBooking={handleDeleteBooking}
-            onPreviewEmail={setPreviewEmailBooking}
-            onSwitchToBooking={() => setActiveTab('booking')}
-          />
+          isHostAuthenticated ? (
+            <AdminDashboard
+              bookings={bookings}
+              profile={profile}
+              onCancelBooking={handleCancelBooking}
+              onDeleteBooking={handleDeleteBooking}
+              onPreviewEmail={setPreviewEmailBooking}
+              onSwitchToBooking={() => setActiveTab('booking')}
+              onHostLogout={handleHostLogout}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-16 bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center mx-auto">
+                <Lock className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-bold text-white">Host Access Required</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                The consultant control center and client booking records are private to Ramesh J. Please unlock with your Host PIN.
+              </p>
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsHostLoginModalOpen(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Enter Host PIN to Unlock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('booking')}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Return to Public Booking View
+                </button>
+              </div>
+            </div>
+          )
         ) : (
           <div>
             {bookingStep === 'confirmed' && lastConfirmedBooking ? (
@@ -163,14 +226,14 @@ export default function App() {
                         </span>
                       </h2>
 
-                      <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
                         Direct 1-on-1 consultation for enterprise AI strategy, Forward Deployed Engineering methodologies, organizational AI upskilling, and architectural advisory. Auto-scheduled on Google Meet with automated email reminders.
                       </p>
 
                       {/* Capabilities pill tags */}
-                      <div className="pt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                      <div className="pt-2 flex flex-wrap gap-2 text-xs text-slate-300">
                         <span className="flex items-center gap-1 bg-slate-950/70 border border-slate-800 px-2.5 py-1 rounded-lg">
-                          <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
                           Production GenAI &amp; Agentic Workflows
                         </span>
                         <span className="flex items-center gap-1 bg-slate-950/70 border border-slate-800 px-2.5 py-1 rounded-lg">
@@ -236,7 +299,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Booking Wizard Section */}
+                {/* Booking Workflow: Selection vs Intake Form */}
                 {bookingStep === 'form' && selectedSlot ? (
                   <BookingForm
                     selectedSlot={selectedSlot}
@@ -247,8 +310,8 @@ export default function App() {
                   />
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                    {/* Left Column: Interactive Calendar (5 cols on lg) */}
-                    <div className="lg:col-span-5 space-y-4">
+                    {/* Left Column: Calendar & Policy */}
+                    <div className="lg:col-span-7 space-y-6">
                       <CalendarView
                         selectedDate={selectedDate}
                         onSelectDate={(date) => {
@@ -256,32 +319,15 @@ export default function App() {
                           setSelectedSlot(null);
                         }}
                       />
-
-                      {/* Rule details summary card */}
-                      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 text-xs text-slate-400 space-y-2">
-                        <div className="font-bold text-white flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                          Availability Schedule Policy
-                        </div>
-                        <p className="text-[11px] leading-relaxed">
-                          • <strong className="text-indigo-300">Weekdays:</strong> 7:00 AM – 8:00 AM and 6:00 PM – 7:00 PM.
-                        </p>
-                        <p className="text-[11px] leading-relaxed">
-                          • <strong className="text-emerald-300">Weekends:</strong> 6:00 AM – 9:00 AM, 5:00 PM – 8:00 PM, and 11:00 PM – 2:00 AM (nightowl sessions).
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          Automated email confirmations and calendar invites are sent upon reservation.
-                        </p>
-                      </div>
                     </div>
 
-                    {/* Right Column: 20-Minute Slots Picker (7 cols on lg) */}
-                    <div className="lg:col-span-7">
+                    {/* Right Column: 20-Minute Slots for Selected Date */}
+                    <div className="lg:col-span-5">
                       <SlotPicker
-                        slots={availableSlots}
+                        selectedDate={selectedDate}
+                        slots={dateSlots}
                         selectedSlot={selectedSlot}
                         onSelectSlot={handleSelectSlot}
-                        selectedDate={selectedDate}
                         timeZoneLabel={timeZoneLabel}
                       />
                     </div>
@@ -294,23 +340,26 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 text-xs text-slate-500">
+      <footer className="border-t border-slate-800/80 bg-slate-950 py-6 text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-center sm:text-left">
             <span className="font-semibold text-slate-300">Ramesh J</span>
             <span>&bull;</span>
             <span>Forward Deployed Engineer (FDE) Consultant &amp; AI Corporate Trainer</span>
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setIsVercelGuideOpen(true)}
-              className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
-            >
-              <Terminal className="w-3 h-3" />
-              <span>Vercel Structure</span>
-            </button>
+            {isHostAuthenticated && (
+              <button
+                type="button"
+                onClick={() => setIsVercelGuideOpen(true)}
+                className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <Terminal className="w-3 h-3" />
+                <span>Vercel Structure</span>
+              </button>
+            )}
+
             <a
               href="mailto:rameshjagarapu1993@gmail.com"
               className="hover:text-slate-300 flex items-center gap-1"
@@ -318,6 +367,29 @@ export default function App() {
               <Mail className="w-3 h-3" />
               rameshjagarapu1993@gmail.com
             </a>
+
+            {/* Subtle Host Portal Link in Footer */}
+            {isHostAuthenticated ? (
+              <button
+                type="button"
+                onClick={handleHostLogout}
+                className="text-slate-500 hover:text-rose-400 flex items-center gap-1 text-[11px] cursor-pointer"
+                title="Lock Host Portal"
+              >
+                <Lock className="w-3 h-3 text-rose-400" />
+                <span>Lock Host Mode</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsHostLoginModalOpen(true)}
+                className="text-slate-600 hover:text-slate-400 flex items-center gap-1 text-[11px] cursor-pointer"
+                title="Host Login (Ramesh J only)"
+              >
+                <Lock className="w-3 h-3" />
+                <span>Host Login</span>
+              </button>
+            )}
           </div>
         </div>
       </footer>
@@ -337,6 +409,12 @@ export default function App() {
       <VercelGuideModal
         isOpen={isVercelGuideOpen}
         onClose={() => setIsVercelGuideOpen(false)}
+      />
+
+      <HostLoginModal
+        isOpen={isHostLoginModalOpen}
+        onClose={() => setIsHostLoginModalOpen(false)}
+        onSuccess={handleHostLoginSuccess}
       />
     </div>
   );

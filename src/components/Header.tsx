@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Video, Clock, Globe, Share2, ShieldCheck, Code, BookOpen, UserCheck, Sparkles, Terminal } from 'lucide-react';
+import { Calendar, Video, Clock, Globe, Share2, ShieldCheck, UserCheck, Sparkles, Terminal, Lock, LogOut } from 'lucide-react';
 import { ConsultantProfile } from '../types';
 
 interface HeaderProps {
@@ -11,6 +11,9 @@ interface HeaderProps {
   onOpenShareModal: () => void;
   onOpenVercelGuide: () => void;
   bookingCount: number;
+  isHostAuthenticated: boolean;
+  onHostLogout: () => void;
+  onOpenHostLogin: () => void;
 }
 
 export const TIMEZONES = [
@@ -33,6 +36,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenShareModal,
   onOpenVercelGuide,
   bookingCount,
+  isHostAuthenticated,
+  onHostLogout,
+  onOpenHostLogin,
 }) => {
   return (
     <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur-md sticky top-0 z-40 text-slate-100">
@@ -74,40 +80,42 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* View Switcher: Client Booking vs Ramesh Dashboard */}
-            <div className="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center">
-              <button
-                type="button"
-                onClick={() => onTabChange('booking')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'booking'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span className="hidden xs:inline">Book Session</span>
-                <span className="xs:hidden">Book</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onTabChange('admin')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                  activeTab === 'admin'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span className="hidden xs:inline">Dashboard</span>
-                <span className="xs:hidden">Admin</span>
-                {bookingCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-400/20 text-indigo-300 border border-indigo-400/30">
-                    {bookingCount}
-                  </span>
-                )}
-              </button>
-            </div>
+            {/* View Switcher: ONLY visible to authenticated Host (Ramesh J) */}
+            {isHostAuthenticated && (
+              <div className="bg-slate-900/90 p-1 rounded-xl border border-indigo-500/40 flex items-center shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => onTabChange('booking')}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'booking'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">Book Session</span>
+                  <span className="xs:hidden">Book</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onTabChange('admin')}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'admin'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">Dashboard</span>
+                  <span className="xs:hidden">Admin</span>
+                  {bookingCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-400/20 text-indigo-300 border border-indigo-400/30">
+                      {bookingCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
 
             {/* Timezone Switcher */}
             <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-300 max-w-[155px] sm:max-w-none">
@@ -131,23 +139,47 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenShareModal}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
               title="Get shareable link for end users"
             >
               <Share2 className="w-3.5 h-3.5 text-indigo-400" />
               <span>Share</span>
             </button>
 
-            {/* Vercel Guide button */}
-            <button
-              type="button"
-              onClick={onOpenVercelGuide}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 transition-colors flex items-center gap-1.5"
-              title="Vercel deployment folder structure & guide"
-            >
-              <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Vercel</span>
-            </button>
+            {/* Host Controls: Vercel guide & Logout if authenticated, or subtle lock icon */}
+            {isHostAuthenticated ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenVercelGuide}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Vercel deployment folder structure & guide"
+                >
+                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Vercel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onHostLogout}
+                  className="px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-800/50 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Lock & Exit Host Mode"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="hidden sm:inline">Lock Host</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenHostLogin}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-300 bg-slate-900/50 hover:bg-slate-800 border border-slate-800/60 transition-colors cursor-pointer"
+                title="Host Portal Login (Ramesh J only)"
+                aria-label="Host Login"
+              >
+                <Lock className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

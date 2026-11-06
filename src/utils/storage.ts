@@ -173,3 +173,44 @@ export function saveEmailSettings(settings: EmailSettings): void {
   }
 }
 
+const HOST_AUTH_KEY = 'ramesh_fde_calendar_host_authenticated';
+const HOST_PIN_KEY = 'ramesh_fde_calendar_host_pin';
+export const DEFAULT_HOST_PIN = '1993';
+
+export function getStoredHostPin(): string {
+  try {
+    return localStorage.getItem(HOST_PIN_KEY) || DEFAULT_HOST_PIN;
+  } catch {
+    return DEFAULT_HOST_PIN;
+  }
+}
+
+export function saveHostPin(pin: string): void {
+  try {
+    localStorage.setItem(HOST_PIN_KEY, pin.trim());
+  } catch (err) {
+    console.error('Failed to save host pin', err);
+  }
+}
+
+export function getStoredHostAuth(): boolean {
+  try {
+    return localStorage.getItem(HOST_AUTH_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setStoredHostAuth(authenticated: boolean): void {
+  try {
+    if (authenticated) {
+      localStorage.setItem(HOST_AUTH_KEY, 'true');
+    } else {
+      localStorage.removeItem(HOST_AUTH_KEY);
+    }
+  } catch (err) {
+    console.error('Failed to update host authentication state', err);
+  }
+}
+
+
