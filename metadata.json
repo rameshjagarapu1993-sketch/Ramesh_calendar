@@ -1,0 +1,6 @@
+{
+  "name": "Ramesh J - AI FDE & Corporate Trainer Calendar",
+  "description": "Schedule 20-minute consultations with Ramesh J, Forward Deployed Engineer (FDE) Consultant, AI FDE Corporate Trainer and Mentor. Direct Google Meet links and automated email reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
