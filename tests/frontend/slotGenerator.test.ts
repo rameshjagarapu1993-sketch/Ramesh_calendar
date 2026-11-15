@@ -5,7 +5,7 @@ import {
   formatTime12h,
   formatSlotRange,
   isWeekendDay
-} from './slotGenerator';
+} from '../../src/utils/slotGenerator';
 import {
   generateGoogleMeetLink,
   generateIcsFileContent,
@@ -14,9 +14,9 @@ import {
   createMailtoUrl,
   parseSlotDateTime,
   slotRangeInZone,
-} from './calendarUtils';
-import { Booking } from '../types';
-import { DEFAULT_EMAIL_SETTINGS } from './storage';
+} from '../../src/utils/calendarUtils';
+import { Booking } from '../../src/types';
+import { DEFAULT_EMAIL_SETTINGS } from '../../src/utils/storage';
 
 test('isWeekendDay detects weekdays and weekends correctly', () => {
   // 2026-11-02 is Monday (weekday)

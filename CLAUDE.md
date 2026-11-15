@@ -11,9 +11,12 @@ A single-host booking calendar ("Ramesh J", AI FDE consultant) — React 19 + Vi
 - `npm run dev` — runs `server.ts` via `tsx`: an Express server on port 3000 that mounts Vite in middleware mode (dev) or serves `dist/` (when `NODE_ENV=production`). Use this rather than plain `vite`, since it also serves `/api/send-email` and `/api/health`.
 - `npm run build` — `vite build` into `dist/`.
 - `npm run lint` — type-check only (`tsc --noEmit`); there is no ESLint.
-- `npm test` — frontend tests (Node's built-in runner via `node --import tsx --test src/utils/slotGenerator.test.ts`).
-- `npm run test:backend` — backend tests (`node --test backend/Code.test.mjs`).
-- Single test: `node --import tsx --test --test-name-pattern="double booking" <file>`.
+All tests live in `tests/` (Node's built-in `node:test` runner, no Jest/Vitest): `tests/frontend/` (src/utils logic, TS via `tsx`), `tests/server/` (the `api/send-email.ts` handler with a fake req/res), `tests/backend/` (`Code.gs` via the mock).
+- `npm test` — frontend + server tests (`node --import tsx --test "tests/frontend/*.test.ts" "tests/server/*.test.ts"`).
+- `npm run test:backend` — Apps Script tests (`node --test "tests/backend/*.test.mjs"`).
+- `npm run test:all` — both.
+- Single file: `node --import tsx --test tests/frontend/storage.test.ts`; single test: add `--test-name-pattern="double booking"`.
+- Frontend tests that touch `localStorage` install an in-memory stub per test (see `tests/frontend/storage.test.ts`).
 - Mock Apps Script backend over HTTP: `node backend/mock-gas.mjs serve` (listens on :4180). Run the site against it with `VITE_BOOKING_API_URL=http://localhost:4180/exec npm run dev`.
 - `run-local.bat` = install + both test suites + `npm run dev` (for the non-developer owner).
 - `npm start` is identical to `npm run dev`; to serve the built `dist/` you must set `NODE_ENV=production`.
@@ -26,7 +29,7 @@ Tests never depend on the real clock: `generateSlotsForDate` takes a `referenceN
 There are three backend paths in this repo, from different stages of the project; know which one you are touching:
 
 1. **Google Apps Script backend (`backend/`) — the intended production backend.** `Code.gs` is deployed manually as an Apps Script web app (see `backend/SETUP.md`). `doGet?action=busy&from&to` returns busy intervals from the host's Google Calendar; `doPost` with `action: 'book'` validates the slot, rejects double-bookings, creates a Calendar event with a real Meet link, emails host + learner, and stores reminder state in Script Properties; a time-driven `sendReminders()` trigger sends 24h/1h/10m reminders. Changes to `Code.gs` only go live after the user re-pastes it and creates a new deployment version.
-   - `backend/mock-gas.mjs` runs the real `Code.gs` inside a Node `vm` with fake `CalendarApp`/`MailApp`/`Utilities`/properties and a fake clock — that's how `Code.test.mjs` tests it. If `Code.gs` starts using a new Apps Script API, the mock must be extended too.
+   - `backend/mock-gas.mjs` runs the real `Code.gs` inside a Node `vm` with fake `CalendarApp`/`MailApp`/`Utilities`/properties and a fake clock — that's how `tests/backend/` tests it. If `Code.gs` starts using a new Apps Script API, the mock must be extended too.
 2. **Frontend client (`src/utils/api.ts`)** — talks to the Apps Script URL from `VITE_BOOKING_API_URL` (baked in at build time). `App.tsx` fetches busy intervals for the visible month; `BookingForm` POSTs the booking. POSTs deliberately use `Content-Type: text/plain` to avoid a CORS preflight Apps Script can't answer. Without the env var the app is in **demo mode** (amber banner, placeholder Meet links).
 3. **Demo/local path** — `src/utils/storage.ts` persists bookings, email settings and host PIN in `localStorage` (bookings are always saved locally too, for the confirmation screen and admin list); `server.ts` and `api/send-email.ts` (Vercel function) send confirmation emails via Resend or SMTP, falling back to a payload for client-side Gmail compose. Bookings carry `emailStatus: 'sent' | 'demo'`; when `'sent'` (live mode) the UI must not send its own confirmation email or add calendar guests, because the backend already did.
 

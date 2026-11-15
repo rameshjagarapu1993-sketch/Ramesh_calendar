@@ -60,7 +60,6 @@ ramesh-j-calendar/
 │   │   └── index.ts                # TypeScript types & interfaces
 │   ├── utils/
 │   │   ├── slotGenerator.ts        # 20-min slot algorithms & schedule rules
-│   │   ├── slotGenerator.test.ts   # Node test runner unit tests
 │   │   ├── calendarUtils.ts        # Google Meet, GCal URLs, and .ics generator
 │   │   └── storage.ts              # LocalStorage persistence manager
 │   ├── App.tsx                     # Main application controller
@@ -87,7 +86,8 @@ All slot times are defined in **India time (IST)**; each visitor sees them conve
 ## 🧪 Run Locally
 
 - Double-click `run-local.bat` (installs, runs all tests, opens http://localhost:3000), or
-- `npm install`, then `npm test`, `npm run test:backend`, `npm run dev`
+- `npm install`, then `npm run test:all` (all tests in the `tests/` folder), then `npm run dev`
+- See [tests/README.md](tests/README.md) for what each test file checks
 
 ---
 

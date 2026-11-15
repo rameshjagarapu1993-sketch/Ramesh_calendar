@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadGas } from './mock-gas.mjs';
+import { loadGas } from '../../backend/mock-gas.mjs';
 // Runs the real Code.gs against fake Google services. Run: npm run test:backend
 
 let NOW = new Date('2026-11-04T06:00:00Z'); // Wed 11:30 IST

@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/utils/slotGenerator.test.ts",
-    "test:backend": "node --test backend/Code.test.mjs"
+    "test": "node --import tsx --test \"tests/frontend/*.test.ts\" \"tests/server/*.test.ts\"",
+    "test:backend": "node --test \"tests/backend/*.test.mjs\"",
+    "test:all": "npm test && npm run test:backend"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
