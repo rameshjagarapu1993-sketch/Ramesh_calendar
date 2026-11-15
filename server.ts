@@ -35,7 +35,22 @@ interface EmailPayload {
   };
 }
 
-function buildEmailHtml(data: EmailPayload): string {
+/** Escapes user-supplied text before it is placed inside email HTML. */
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+
+/** Returns a 400 message if the payload is unsafe to send, otherwise null. */
+function validatePayload(p: { to?: string; googleMeetLink?: string }): string | null {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(p.to || '').trim())) return 'Invalid recipient email address';
+  if (p.googleMeetLink && !/^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(p.googleMeetLink)) return 'Invalid Google Meet link';
+  return null;
+}
+
+function buildEmailHtml(raw: EmailPayload): string {
+  const data = Object.fromEntries(
+    Object.entries(raw).map(([k, v]) => [k, typeof v === 'string' ? escapeHtml(v) : v])
+  ) as EmailPayload;
   return `
 <!DOCTYPE html>
 <html>
@@ -128,6 +143,8 @@ app.post('/api/send-email', async (req: Request, res: Response) => {
     if (!payload.to || !payload.clientName || !payload.formattedTime) {
       return res.status(400).json({ success: false, error: 'Missing required booking fields (to, clientName, formattedTime)' });
     }
+    const invalid = validatePayload(payload);
+    if (invalid) return res.status(400).json({ success: false, error: invalid });
 
     const resendKey = payload.resendApiKey || process.env.RESEND_API_KEY;
     const smtpConfig = payload.smtpConfig || (process.env.SMTP_HOST && process.env.SMTP_PASS ? {

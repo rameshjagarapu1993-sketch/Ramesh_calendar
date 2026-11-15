@@ -1,8 +1,9 @@
 import { Booking } from '../types';
 
 /**
- * Generates a realistic unique Google Meet URL format.
- * Format: https://meet.google.com/xxx-yyyy-zzz
+ * DEMO ONLY: builds a Meet-style URL. These are NOT real meeting rooms.
+ * Real Meet links come from the booking backend (backend/Code.gs), which creates
+ * a Google Calendar event with a genuine Meet conference.
  */
 export function generateGoogleMeetLink(bookingId?: string): string {
   if (bookingId) {
@@ -20,13 +21,53 @@ export function generateGoogleMeetLink(bookingId?: string): string {
   return `https://meet.google.com/${randPart(3)}-${randPart(4)}-${randPart(3)}`;
 }
 
+/** Ramesh's home time zone. All slot times are defined in IST. */
+export const HOST_TIME_ZONE = 'Asia/Kolkata';
+const IST_OFFSET = '+05:30';
+
 /**
- * Converts date and time string to Date object.
+ * Converts a slot's date + IST time into the exact moment in time (a Date).
+ * Correct in every browser time zone (a learner in New York gets the same instant).
+ * Night Owl slots that start after midnight (00:00–01:40) belong to the previous
+ * evening's session, so they roll over to the next calendar day.
  */
 export function parseSlotDateTime(dateString: string, time24: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  const [hour, minute] = time24.split(':').map(Number);
-  return new Date(year, month - 1, day, hour, minute, 0);
+  const d = new Date(`${dateString}T${time24}:00${IST_OFFSET}`);
+  const hour = Number(time24.split(':')[0]);
+  if (hour < 6) d.setTime(d.getTime() + 24 * 60 * 60 * 1000);
+  return d;
+}
+
+/** End instant of a slot (handles 23:40 → 00:00 crossing midnight). */
+export function parseSlotEnd(dateString: string, startTime: string, endTime: string): Date {
+  const start = parseSlotDateTime(dateString, startTime);
+  let end = parseSlotDateTime(dateString, endTime);
+  if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  return end;
+}
+
+/** Formats an instant in a given IANA time zone, e.g. "7:00 AM". */
+export function formatTimeInZone(date: Date, timeZone: string): string {
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone });
+}
+
+/** "7:00 AM - 7:20 AM" for a slot, shown in the given time zone. */
+export function slotRangeInZone(dateString: string, startTime: string, endTime: string, timeZone: string): string {
+  const start = parseSlotDateTime(dateString, startTime);
+  const end = parseSlotEnd(dateString, startTime, endTime);
+  return `${formatTimeInZone(start, timeZone)} - ${formatTimeInZone(end, timeZone)}`;
+}
+
+/** Formats an instant's date in a given time zone, e.g. "Sat, Nov 7". */
+export function formatDateInZone(date: Date, timeZone: string): string {
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone });
+}
+
+/** "Mon, Nov 9 at 8:30 PM - 8:50 PM (America/New_York)" – the booking's time in the learner's own zone. */
+export function bookingWhenLabel(b: { dateString: string; startTime: string; endTime: string; timeZone: string }): string {
+  const tz = b.timeZone || HOST_TIME_ZONE;
+  const start = parseSlotDateTime(b.dateString, b.startTime);
+  return `${formatDateInZone(start, tz)} at ${slotRangeInZone(b.dateString, b.startTime, b.endTime, tz)} (${tz})`;
 }
 
 /**
@@ -49,14 +90,11 @@ export function createGoogleCalendarUrl(booking: {
   googleMeetLink: string;
   notes?: string;
   company?: string;
+  /** 'sent' = the backend already sent real invites, so don't add guests again */
+  emailStatus?: 'sent' | 'demo';
 }): string {
   const start = parseSlotDateTime(booking.dateString, booking.startTime);
-  const end = parseSlotDateTime(booking.dateString, booking.endTime);
-
-  // If slot ends on next day (e.g. nightowl 23:40 - 00:00 or 01:40 - 02:00)
-  if (end <= start) {
-    end.setDate(end.getDate() + 1);
-  }
+  const end = parseSlotEnd(booking.dateString, booking.startTime, booking.endTime);
 
   const title = encodeURIComponent(
     `Consultation: Ramesh J (AI FDE) & ${booking.clientName}`
@@ -74,10 +112,10 @@ export function createGoogleCalendarUrl(booking: {
 
   const location = encodeURIComponent(booking.googleMeetLink);
   // Adding guests parameter so Google Calendar automatically invites the attendee via email
+  const base = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}`;
+  if (booking.emailStatus === 'sent') return base;
   const guestList = [booking.clientEmail, 'rameshjagarapu1993@gmail.com'].filter(Boolean).join(',');
-  const guests = encodeURIComponent(guestList);
-
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}&add=${guests}`;
+  return `${base}&add=${encodeURIComponent(guestList)}`;
 }
 
 /**
@@ -88,16 +126,18 @@ export function createGmailComposeUrl(booking: {
   clientName: string;
   clientEmail: string;
   dateString: string;
-  formattedTime: string;
+  startTime: string;
+  endTime: string;
   timeZone: string;
   googleMeetLink: string;
   company?: string;
   notes?: string;
 }): string {
+  const when = bookingWhenLabel(booking);
   const to = encodeURIComponent(booking.clientEmail);
   const cc = encodeURIComponent('rameshjagarapu1993@gmail.com');
   const su = encodeURIComponent(
-    `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${booking.dateString} ${booking.formattedTime}`
+    `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${when}`
   );
   
   const bodyText = 
@@ -106,7 +146,7 @@ export function createGmailComposeUrl(booking: {
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `SESSION DETAILS\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `• Date & Time: ${booking.dateString} at ${booking.formattedTime} (${booking.timeZone})\n` +
+    `• Date & Time: ${when}\n` +
     `• Topic: ${booking.topicTitle}\n` +
     (booking.company ? `• Organization: ${booking.company}\n` : '') +
     `• Google Meet Link: ${booking.googleMeetLink}\n` +
@@ -129,19 +169,21 @@ export function createMailtoUrl(booking: {
   clientName: string;
   clientEmail: string;
   dateString: string;
-  formattedTime: string;
+  startTime: string;
+  endTime: string;
   timeZone: string;
   googleMeetLink: string;
   company?: string;
   notes?: string;
 }): string {
+  const when = bookingWhenLabel(booking);
   const su = encodeURIComponent(
-    `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${booking.dateString} ${booking.formattedTime}`
+    `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${when}`
   );
   const bodyText = 
     `Hi ${booking.clientName},\n\n` +
     `Your 20-minute consultation with Ramesh J is confirmed!\n\n` +
-    `• Date & Time: ${booking.dateString} at ${booking.formattedTime} (${booking.timeZone})\n` +
+    `• Date & Time: ${when}\n` +
     `• Topic: ${booking.topicTitle}\n` +
     `• Google Meet Link: ${booking.googleMeetLink}\n\n` +
     `Best regards,\nRamesh J\nrameshjagarapu1993@gmail.com`;
@@ -155,11 +197,7 @@ export function createMailtoUrl(booking: {
  */
 export function generateIcsFileContent(booking: Booking): string {
   const start = parseSlotDateTime(booking.dateString, booking.startTime);
-  const end = parseSlotDateTime(booking.dateString, booking.endTime);
-
-  if (end <= start) {
-    end.setDate(end.getDate() + 1);
-  }
+  const end = parseSlotEnd(booking.dateString, booking.startTime, booking.endTime);
 
   const dtStart = toGCalTimeString(start);
   const dtEnd = toGCalTimeString(end);

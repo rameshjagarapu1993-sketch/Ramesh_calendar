@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Mail, User, Building, MessageSquare, Bell, Video, Calendar, ShieldAlert, Check, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { TimeSlot, SessionTopic, Booking } from '../types';
-import { generateGoogleMeetLink } from '../utils/calendarUtils';
+import { generateGoogleMeetLink, parseSlotDateTime, slotRangeInZone, HOST_TIME_ZONE } from '../utils/calendarUtils';
+import { bookSlot, isLiveMode } from '../utils/api';
 
 interface BookingFormProps {
   selectedSlot: TimeSlot;
@@ -9,6 +10,8 @@ interface BookingFormProps {
   timeZone: string;
   onSubmitBooking: (booking: Booking) => void;
   onCancel: () => void;
+  /** Called when the backend says the slot was taken in the meantime */
+  onSlotTaken?: () => void;
 }
 
 const TOPIC_OPTIONS: { id: SessionTopic; title: string; desc: string }[] = [
@@ -45,6 +48,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   timeZone,
   onSubmitBooking,
   onCancel,
+  onSlotTaken,
 }) => {
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -60,6 +64,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingStage, setSubmittingStage] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -75,17 +80,50 @@ export const BookingForm: React.FC<BookingFormProps> = ({
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return; // Prevent duplicate submissions
     if (!validate()) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     setSubmittingStage('Scheduling Google Meet & Calendar Invite...');
 
     const bookingId = `bk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const topicTitle = TOPIC_OPTIONS.find((t) => t.id === topic)?.title || 'Consultation Session';
-    const meetLink = generateGoogleMeetLink(bookingId);
+    const reminders = { reminder24h, reminder1h, reminder10m };
+    let meetLink = '';
+    let calendarEventLink: string | undefined;
+
+    if (isLiveMode()) {
+      // Real booking: the backend checks Ramesh's Google Calendar, creates the Meet event and emails both sides
+      try {
+        const res = await bookSlot({
+          startIso: parseSlotDateTime(selectedSlot.dateString, selectedSlot.startTime).toISOString(),
+          clientName: clientName.trim(),
+          clientEmail: clientEmail.trim().toLowerCase(),
+          company: company.trim() || undefined,
+          topicTitle,
+          notes: notes.trim() || undefined,
+          timeZone,
+          reminders,
+        });
+        if (!res.ok) {
+          setIsSubmitting(false);
+          setSubmitError(res.message || 'Booking failed. Please try again.');
+          if (res.error === 'SLOT_TAKEN') onSlotTaken?.();
+          return;
+        }
+        meetLink = res.meetLink || '';
+        calendarEventLink = res.eventLink;
+      } catch {
+        setIsSubmitting(false);
+        setSubmitError('Could not reach the booking service. Check your connection and try again.');
+        return;
+      }
+    } else {
+      meetLink = generateGoogleMeetLink(bookingId); // demo placeholder, not a real Meet room
+    }
 
     const newBooking: Booking = {
       id: bookingId,
@@ -103,13 +141,17 @@ export const BookingForm: React.FC<BookingFormProps> = ({
       notes: notes.trim() || undefined,
       googleMeetLink: meetLink,
       createdAt: new Date().toISOString(),
-      reminders: {
-        reminder24h,
-        reminder1h,
-        reminder10m,
-      },
+      reminders,
       status: 'confirmed',
+      emailStatus: isLiveMode() ? 'sent' : 'demo',
+      calendarEventLink,
     };
+
+    if (isLiveMode()) {
+      setIsSubmitting(false);
+      onSubmitBooking(newBooking);
+      return;
+    }
 
     // Stage 2 feedback to assure user email & calendar trigger is actively processing
     setTimeout(() => {
@@ -132,15 +174,21 @@ export const BookingForm: React.FC<BookingFormProps> = ({
           </span>
           <div className="text-sm font-bold text-white mt-0.5 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-400" />
-            {selectedDate.toLocaleDateString('en-US', {
+            {parseSlotDateTime(selectedSlot.dateString, selectedSlot.startTime).toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
               year: 'numeric',
+              timeZone,
             })}
           </div>
           <div className="text-xs text-slate-300 mt-1 flex items-center gap-3">
-            <span className="font-semibold text-emerald-400">{selectedSlot.formattedTime}</span>
+            <span className="font-semibold text-emerald-400">
+              {slotRangeInZone(selectedSlot.dateString, selectedSlot.startTime, selectedSlot.endTime, timeZone)}
+              {timeZone !== HOST_TIME_ZONE && (
+                <span className="text-slate-400 font-normal"> ({selectedSlot.formattedTime} IST)</span>
+              )}
+            </span>
             <span className="text-slate-500">&bull;</span>
             <span className="flex items-center gap-1 text-blue-400">
               <Video className="w-3.5 h-3.5" /> Google Meet (20 Mins)
@@ -325,6 +373,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({
             </label>
           </div>
         </div>
+
+        {submitError && (
+          <div role="alert" className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" /> {submitError}
+          </div>
+        )}
 
         {/* Submit Actions */}
         <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">

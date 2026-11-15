@@ -1,5 +1,6 @@
 import { Booking } from '../types';
 import { getStoredEmailSettings, EmailSettings } from './storage';
+import { parseSlotDateTime, formatDateInZone, slotRangeInZone, HOST_TIME_ZONE } from './calendarUtils';
 
 export interface SendEmailResult {
   success: boolean;
@@ -30,8 +31,9 @@ export async function dispatchBookingEmail(
       body: JSON.stringify({
         to: booking.clientEmail,
         clientName: booking.clientName,
-        dateString: booking.dateString,
-        formattedTime: booking.formattedTime,
+        // Date and time expressed in the learner's own time zone (slots are stored in IST)
+        dateString: formatDateInZone(parseSlotDateTime(booking.dateString, booking.startTime), booking.timeZone || HOST_TIME_ZONE),
+        formattedTime: slotRangeInZone(booking.dateString, booking.startTime, booking.endTime, booking.timeZone || HOST_TIME_ZONE),
         timeZone: booking.timeZone,
         topicTitle: booking.topicTitle,
         googleMeetLink: booking.googleMeetLink,

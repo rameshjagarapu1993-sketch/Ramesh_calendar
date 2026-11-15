@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Video, Calendar, Bell, Send, Check, Sparkles, ExternalLink, Copy, HelpCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { Booking } from '../types';
-import { createGoogleCalendarUrl, createGmailComposeUrl, createMailtoUrl, getReminderTimeline } from '../utils/calendarUtils';
+import { createGoogleCalendarUrl, createGmailComposeUrl, createMailtoUrl, getReminderTimeline, bookingWhenLabel, slotRangeInZone, HOST_TIME_ZONE } from '../utils/calendarUtils';
 import { dispatchBookingEmail } from '../utils/emailService';
 
 interface EmailModalProps {
@@ -17,6 +17,9 @@ export const EmailModal: React.FC<EmailModalProps> = ({ booking, onClose }) => {
 
   if (!booking) return null;
 
+  // Slot times are stored in IST; show them in the learner's own time zone
+  const localTime = slotRangeInZone(booking.dateString, booking.startTime, booking.endTime, booking.timeZone || HOST_TIME_ZONE);
+
   const timeline = getReminderTimeline(booking.dateString, booking.startTime);
   const gcalUrl = createGoogleCalendarUrl(booking);
   const gmailUrl = createGmailComposeUrl(booking);
@@ -26,7 +29,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ booking, onClose }) => {
     const text = 
       `Hi ${booking.clientName},\n\n` +
       `Your 20-minute consultation with Ramesh J is confirmed!\n\n` +
-      `• Date & Time: ${booking.dateString} at ${booking.formattedTime} (${booking.timeZone})\n` +
+      `• Date & Time: ${bookingWhenLabel(booking)}\n` +
       `• Topic: ${booking.topicTitle}\n` +
       (booking.company ? `• Organization: ${booking.company}\n` : '') +
       `• Google Meet Link: ${booking.googleMeetLink}\n\n` +
@@ -41,9 +44,9 @@ export const EmailModal: React.FC<EmailModalProps> = ({ booking, onClose }) => {
   const getSubject = () => {
     switch (activeTab) {
       case 'confirmation':
-        return `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${booking.dateString} ${booking.formattedTime}`;
+        return `Confirmed: 20-Min Consultation with Ramesh J (AI FDE) - ${bookingWhenLabel(booking)}`;
       case 'reminder24h':
-        return `Reminder (Tomorrow): AI FDE Consultation with Ramesh J - ${booking.formattedTime}`;
+        return `Reminder (Tomorrow): AI FDE Consultation with Ramesh J - ${localTime}`;
       case 'reminder1h':
         return `Starting in 1 Hour: AI FDE Consultation with Ramesh J [Google Meet Link Inside]`;
       case 'reminder10m':
@@ -191,7 +194,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ booking, onClose }) => {
 
             {activeTab === 'reminder24h' && (
               <p className="text-slate-300">
-                This is a friendly reminder that our 20-minute AI FDE strategy session is scheduled for tomorrow at <strong className="text-white">{booking.formattedTime}</strong>.
+                This is a friendly reminder that our 20-minute AI FDE strategy session is scheduled for tomorrow at <strong className="text-white">{localTime}</strong>.
               </p>
             )}
 
@@ -212,7 +215,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({ booking, onClose }) => {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">Date &amp; Time:</span>
                 <span className="font-bold text-white">
-                  {booking.dateString} &bull; {booking.formattedTime}
+                  {bookingWhenLabel(booking)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">

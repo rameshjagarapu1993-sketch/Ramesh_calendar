@@ -27,6 +27,7 @@ import { Booking, ConsultantProfile } from '../types';
 import { createGoogleCalendarUrl, createGmailComposeUrl, downloadIcsFile } from '../utils/calendarUtils';
 import { getStoredEmailSettings, saveEmailSettings, EmailSettings, getStoredHostPin, saveHostPin } from '../utils/storage';
 import { sendTestEmail, SendEmailResult } from '../utils/emailService';
+import { isLiveMode } from '../utils/api';
 
 interface AdminDashboardProps {
   bookings: Booking[];
@@ -429,6 +430,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <p className="text-xs text-slate-400 mt-0.5">
               Showing {filteredBookings.length} of {bookings.length} reservations
             </p>
+            {isLiveMode() && (
+              <p className="text-[11px] text-amber-300 mt-1 max-w-xl">
+                This list only shows bookings made in this browser. Every real booking is in your Google Calendar
+                (and in the "New booking" emails). To cancel one, delete the event in Google Calendar.
+              </p>
+            )}
           </div>
 
           {/* Search & Filter */}
@@ -503,7 +510,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>&bull;</span>
                       <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                         <Clock className="w-3.5 h-3.5" />
-                        {b.formattedTime}
+                        {b.formattedTime} IST
                       </span>
                       <span>&bull;</span>
                       <a

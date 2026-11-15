@@ -41,6 +41,9 @@ export interface Booking {
     reminder10m: boolean;
   };
   status: 'confirmed' | 'cancelled';
+  /** 'sent' = real emails sent by the booking backend; 'demo' = no backend configured */
+  emailStatus?: 'sent' | 'demo';
+  calendarEventLink?: string;
 }
 
 export interface ConsultantProfile {

@@ -10,6 +10,18 @@ interface VercelResponseLike {
   json: (data: any) => void;
 }
 
+/** Escapes user-supplied text before it is placed inside email HTML. */
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+
+/** Returns a 400 message if the payload is unsafe to send, otherwise null. */
+function validatePayload(p: { to?: string; googleMeetLink?: string }): string | null {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(p.to || '').trim())) return 'Invalid recipient email address';
+  if (p.googleMeetLink && !/^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(p.googleMeetLink)) return 'Invalid Google Meet link';
+  return null;
+}
+
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -20,6 +32,10 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     if (!payload?.to || !payload?.clientName || !payload?.formattedTime) {
       return res.status(400).json({ success: false, error: 'Missing required booking fields (to, clientName, formattedTime)' });
     }
+    const invalid = validatePayload(payload);
+    if (invalid) return res.status(400).json({ success: false, error: invalid });
+    // HTML-escaped copy of every field for the HTML body
+    const h = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, typeof v === 'string' ? escapeHtml(v) : v])) as typeof payload;
 
     const resendKey = payload.resendApiKey || process.env.RESEND_API_KEY;
     const smtpConfig = payload.smtpConfig || (process.env.SMTP_HOST && process.env.SMTP_PASS ? {
@@ -58,16 +74,16 @@ rameshjagarapu1993@gmail.com
           <h2 style="color: #ffffff; margin-top: 0;">Ramesh J &bull; 20-Min Focus Session</h2>
           <p style="color: #a5b4fc; font-size: 13px;">Forward Deployed Engineer (FDE) Consultant & AI Corporate Trainer</p>
           <hr style="border: none; border-top: 1px solid #334155; margin: 16px 0;" />
-          <p>Hi <strong>${payload.clientName}</strong>,</p>
+          <p>Hi <strong>${h.clientName}</strong>,</p>
           <p>Your 20-minute consultation is confirmed! Below are your session details:</p>
           <ul>
-            <li><strong>Date:</strong> ${payload.dateString}</li>
-            <li><strong>Time:</strong> ${payload.formattedTime} (${payload.timeZone})</li>
-            <li><strong>Topic:</strong> ${payload.topicTitle}</li>
-            <li><strong>Google Meet Link:</strong> <a href="${payload.googleMeetLink}" style="color: #60a5fa;">${payload.googleMeetLink}</a></li>
+            <li><strong>Date:</strong> ${h.dateString}</li>
+            <li><strong>Time:</strong> ${h.formattedTime} (${h.timeZone})</li>
+            <li><strong>Topic:</strong> ${h.topicTitle}</li>
+            <li><strong>Google Meet Link:</strong> <a href="${h.googleMeetLink}" style="color: #60a5fa;">${h.googleMeetLink}</a></li>
           </ul>
           <p style="margin-top: 24px;">
-            <a href="${payload.googleMeetLink}" style="background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
+            <a href="${h.googleMeetLink}" style="background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
               Join Google Meet Room
             </a>
           </p>

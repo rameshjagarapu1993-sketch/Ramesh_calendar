@@ -26,6 +26,9 @@ import {
   createMailtoUrl,
   downloadIcsFile,
   getReminderTimeline,
+  parseSlotDateTime,
+  slotRangeInZone,
+  HOST_TIME_ZONE,
 } from '../utils/calendarUtils';
 import { dispatchBookingEmail, SendEmailResult } from '../utils/emailService';
 import { getStoredEmailSettings, saveEmailSettings, EmailSettings } from '../utils/storage';
@@ -59,6 +62,13 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
       });
     } catch {
       // ignore
+    }
+
+    // Live mode: the booking backend already emailed the learner and Ramesh – don't send a duplicate
+    if (booking.emailStatus === 'sent') {
+      setDispatchStatus('delivered');
+      setDispatchResult({ success: true, provider: 'Google (booking backend)' });
+      return;
     }
 
     let isMounted = true;
@@ -145,11 +155,12 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
           <div>
             <div className="text-xs text-slate-400 font-medium">Session Date</div>
             <div className="text-sm font-bold text-white">
-              {new Date(`${booking.dateString}T00:00:00`).toLocaleDateString('en-US', {
+              {parseSlotDateTime(booking.dateString, booking.startTime).toLocaleDateString('en-US', {
                 weekday: 'long',
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric',
+                timeZone: booking.timeZone || HOST_TIME_ZONE,
               })}
             </div>
           </div>
@@ -162,9 +173,12 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
           <div>
             <div className="text-xs text-slate-400 font-medium">Time (20 Minutes)</div>
             <div className="text-sm font-bold text-white">
-              {booking.formattedTime}
+              {slotRangeInZone(booking.dateString, booking.startTime, booking.endTime, booking.timeZone || HOST_TIME_ZONE)}
             </div>
-            <div className="text-[11px] text-slate-400">{booking.timeZone}</div>
+            <div className="text-[11px] text-slate-400">
+              {booking.timeZone}
+              {booking.timeZone && booking.timeZone !== HOST_TIME_ZONE && ` · ${booking.formattedTime} IST`}
+            </div>
           </div>
         </div>
       </div>
@@ -227,7 +241,7 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
           className="p-3.5 rounded-xl bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
         >
           <Calendar className="w-4 h-4 text-indigo-400" />
-          <span>Add to Google Calendar (Invites Attendee)</span>
+          <span>{booking.emailStatus === 'sent' ? 'Add to My Google Calendar' : 'Add to Google Calendar (Invites Attendee)'}</span>
           <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
         </a>
 
@@ -307,7 +321,7 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
         </div>
 
         {/* Optional inline Resend Key configuration */}
-        {showKeyConfig && (
+        {showKeyConfig && booking.emailStatus !== 'sent' && (
           <form onSubmit={handleSaveResendKey} className="mb-4 p-3.5 bg-slate-900/90 border border-indigo-500/40 rounded-xl space-y-2.5 text-xs">
             <div className="flex items-center justify-between">
               <span className="font-bold text-white flex items-center gap-1.5">
@@ -345,7 +359,8 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
           </form>
         )}
 
-        {/* 1-Click Send Actions */}
+        {/* 1-Click Send Actions (only needed when no backend sent the email) */}
+        {booking.emailStatus !== 'sent' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2">
           <a
             href={createGmailComposeUrl(booking)}
@@ -366,6 +381,7 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
             <span>Open in Default Mail App</span>
           </a>
         </div>
+        )}
       </div>
 
       {/* Reminder Schedule Timeline */}

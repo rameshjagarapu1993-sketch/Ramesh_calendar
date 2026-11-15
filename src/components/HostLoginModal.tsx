@@ -104,7 +104,7 @@ export const HostLoginModal: React.FC<HostLoginModalProps> = ({ isOpen, onClose,
           </div>
 
           <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-400">
-            <span className="text-indigo-300 font-semibold">Note:</span> Default Host PIN is <strong className="text-white font-mono">1993</strong>. You can change this anytime inside the Admin Dashboard.
+            <span className="text-indigo-300 font-semibold">Note:</span> This page is for Ramesh J only. The PIN can be changed inside the Admin Dashboard.
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2.5">

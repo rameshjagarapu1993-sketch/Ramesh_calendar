@@ -12,6 +12,8 @@ import {
   createGoogleCalendarUrl,
   createGmailComposeUrl,
   createMailtoUrl,
+  parseSlotDateTime,
+  slotRangeInZone,
 } from './calendarUtils';
 import { Booking } from '../types';
 import { DEFAULT_EMAIL_SETTINGS } from './storage';
@@ -183,3 +185,55 @@ test('Email settings storage and defaults', () => {
   assert.strictEqual(DEFAULT_EMAIL_SETTINGS.autoOpenGmailOnBooking, true);
 });
 
+// ---- Time zone correctness (slots are defined in IST, learners may be anywhere) ----
+
+test('Slot instants are IST-anchored regardless of the browser time zone', () => {
+  assert.equal(parseSlotDateTime('2026-11-09', '07:00').toISOString(), '2026-11-09T01:30:00.000Z');
+  assert.equal(parseSlotDateTime('2026-11-07', '23:40').toISOString(), '2026-11-07T18:10:00.000Z');
+  // Night Owl after midnight belongs to the next calendar day
+  assert.equal(parseSlotDateTime('2026-11-07', '00:20').toISOString(), '2026-11-07T18:50:00.000Z');
+  assert.equal(parseSlotDateTime('2026-11-07', '01:40').toISOString(), '2026-11-07T20:10:00.000Z');
+});
+
+test('Google Calendar link uses the correct UTC time for an IST slot', () => {
+  const url = createGoogleCalendarUrl({
+    topicTitle: 't', clientName: 'c', dateString: '2026-11-09', startTime: '07:00', endTime: '07:20', googleMeetLink: 'm',
+  });
+  assert.ok(url.includes('dates=20261109T013000Z/20261109T015000Z'), url);
+  const night = createGoogleCalendarUrl({
+    topicTitle: 't', clientName: 'c', dateString: '2026-11-07', startTime: '23:40', endTime: '00:00', googleMeetLink: 'm',
+  });
+  assert.ok(night.includes('dates=20261107T181000Z/20261107T183000Z'), night);
+});
+
+test('Slot times convert to the learner time zone', () => {
+  assert.equal(slotRangeInZone('2026-11-09', '07:00', '07:20', 'America/New_York'), '8:30 PM - 8:50 PM');
+  assert.equal(slotRangeInZone('2026-11-09', '07:00', '07:20', 'Asia/Kolkata'), '7:00 AM - 7:20 AM');
+});
+
+test('Past-slot detection uses real instants (7:00 IST is past at 02:00 UTC)', () => {
+  const slots = generateSlotsForDate('2026-11-09', [], new Date('2026-11-09T02:00:00Z'));
+  assert.equal(slots.find((s) => s.startTime === '07:00')?.isPast, true);  // 01:30Z
+  assert.equal(slots.find((s) => s.startTime === '07:40')?.isPast, false); // 02:10Z
+});
+
+test('Busy intervals from Google Calendar mark overlapping slots as booked', () => {
+  const busy = [{ start: Date.parse('2026-11-09T01:40:00Z'), end: Date.parse('2026-11-09T02:00:00Z') }];
+  const slots = generateSlotsForDate('2026-11-09', [], new Date('2026-11-01T00:00:00Z'), busy);
+  assert.deepEqual(slots.filter((s) => s.isBooked).map((s) => s.startTime), ['07:00', '07:20']);
+});
+
+test('Gmail confirmation shows the time in the learner time zone, not IST relabelled', () => {
+  const url = createGmailComposeUrl({
+    topicTitle: 't', clientName: 'c', clientEmail: 'a@b.co', dateString: '2026-11-09',
+    startTime: '07:00', endTime: '07:20', timeZone: 'America/New_York', googleMeetLink: 'https://meet.google.com/abc-defg-hij',
+  });
+  const body = decodeURIComponent(url);
+  assert.ok(body.includes('Sun, Nov 8 at 8:30 PM - 8:50 PM (America/New_York)'), body);
+});
+
+test('Calendar link skips guest invites when the backend already sent them', () => {
+  const base = { topicTitle: 't', clientName: 'c', clientEmail: 'a@b.co', dateString: '2026-11-09', startTime: '07:00', endTime: '07:20', googleMeetLink: 'm' };
+  assert.ok(createGoogleCalendarUrl(base).includes('&add='));
+  assert.ok(!createGoogleCalendarUrl({ ...base, emailStatus: 'sent' }).includes('&add='));
+});

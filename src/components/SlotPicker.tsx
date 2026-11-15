@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Sun, Sunset, Moon, CheckCircle2, AlertCircle, Video } from 'lucide-react';
 import { TimeSlot } from '../types';
+import { HOST_TIME_ZONE, parseSlotDateTime, slotRangeInZone, formatDateInZone } from '../utils/calendarUtils';
 
 interface SlotPickerProps {
   slots: TimeSlot[];
@@ -8,6 +9,8 @@ interface SlotPickerProps {
   onSelectSlot: (slot: TimeSlot) => void;
   selectedDate: Date;
   timeZoneLabel: string;
+  /** Viewer's selected IANA time zone; slots are converted from IST into it */
+  timeZone?: string;
 }
 
 export const SlotPicker: React.FC<SlotPickerProps> = ({
@@ -16,7 +19,11 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
   onSelectSlot,
   selectedDate,
   timeZoneLabel,
+  timeZone = HOST_TIME_ZONE,
 }) => {
+  const isHostZone = timeZone === HOST_TIME_ZONE;
+  const label = (s: TimeSlot) => slotRangeInZone(s.dateString, s.startTime, s.endTime, timeZone);
+  const localDate = (s: TimeSlot) => formatDateInZone(parseSlotDateTime(s.dateString, s.startTime), timeZone);
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'morning' | 'evening' | 'night'>('all');
 
   const morningSlots = slots.filter((s) => s.period === 'morning');
@@ -149,9 +156,9 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
                 >
                   <div className="flex items-center justify-between w-full">
                     <span className="font-bold text-sm tracking-tight text-white flex items-center gap-1.5">
-                      {slot.formattedTime.split(' - ')[0]}
+                      {label(slot).split(' - ')[0]}
                       <span className="text-xs font-normal text-slate-400">
-                        &rarr; {slot.formattedTime.split(' - ')[1]}
+                        &rarr; {label(slot).split(' - ')[1]}
                       </span>
                     </span>
 
@@ -175,8 +182,8 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
                       <Video className="w-3 h-3 text-blue-400" />
                       Google Meet (20m)
                     </span>
-                    <span className="capitalize text-[10px] text-slate-400">
-                      {slot.period}
+                    <span className={`${isHostZone ? 'capitalize ' : ''}text-[10px] text-slate-400`}>
+                      {isHostZone ? slot.period : `${localDate(slot)} · ${slot.formattedTime.split(' - ')[0]} IST`}
                     </span>
                   </div>
                 </button>
@@ -191,12 +198,8 @@ export const SlotPicker: React.FC<SlotPickerProps> = ({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>
-              Selected slot: <strong>{selectedSlot.formattedTime}</strong> on{' '}
-              {selectedDate.toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-              })}
+              Selected slot: <strong>{label(selectedSlot)}</strong> on{' '}
+              {localDate(selectedSlot)}
             </span>
           </div>
           <span className="text-[11px] text-indigo-300 font-medium">Ready to reserve &rarr;</span>

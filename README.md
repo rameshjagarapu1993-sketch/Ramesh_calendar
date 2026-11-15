@@ -76,6 +76,21 @@ ramesh-j-calendar/
 
 ---
 
+## 🔌 Real Bookings (Google Meet + Emails)
+
+Out of the box the site runs in **demo mode** (amber banner): bookings stay in the visitor's browser and Meet links are placeholders.
+To go live, deploy the Google Apps Script backend in `backend/` and set `VITE_BOOKING_API_URL` — full steps in **[backend/SETUP.md](backend/SETUP.md)**.
+The backend then creates a real Google Calendar event with a Meet link, emails you and the learner, blocks double bookings, and sends 24h / 1h / 10m reminders.
+
+All slot times are defined in **India time (IST)**; each visitor sees them converted to their own time zone.
+
+## 🧪 Run Locally
+
+- Double-click `run-local.bat` (installs, runs all tests, opens http://localhost:3000), or
+- `npm install`, then `npm test`, `npm run test:backend`, `npm run dev`
+
+---
+
 ## 🚀 Deploying to Vercel
 
 1. Push your repository to GitHub:

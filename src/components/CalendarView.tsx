@@ -49,7 +49,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const isDatePast = (date: Date) => {
     const today = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
     const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    return target < today;
+    // The booking backend accepts slots up to MAX_DAYS_AHEAD (120) days out, so dates beyond that are disabled too
+    const lastBookable = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 119);
+    return target < today || target > lastBookable;
   };
 
   // Quick jump presets

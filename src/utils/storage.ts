@@ -1,5 +1,4 @@
 import { Booking, ConsultantProfile } from '../types';
-import { generateGoogleMeetLink } from './calendarUtils';
 
 const STORAGE_KEYS = {
   BOOKINGS: 'ramesh_fde_calendar_bookings',
@@ -26,46 +25,8 @@ export const DEFAULT_PROFILE: ConsultantProfile = {
   },
 };
 
-export const INITIAL_DEMO_BOOKINGS: Booking[] = [
-  {
-    id: 'bk-demo-01',
-    slotId: '2026-11-04_07-20',
-    dateString: '2026-11-04',
-    startTime: '07:20',
-    endTime: '07:40',
-    formattedTime: '7:20 AM - 7:40 AM',
-    timeZone: 'Asia/Kolkata',
-    clientName: 'Deepak Sharma',
-    clientEmail: 'deepak.s@fintech-enterprise.io',
-    topic: 'fde-consulting',
-    topicTitle: 'Forward Deployed Engineering Advisory',
-    company: 'Fintech Solutions Ltd',
-    notes: 'Discussion on structuring an internal FDE squad for client deployments.',
-    googleMeetLink: generateGoogleMeetLink('deepak-fde'),
-    createdAt: '2026-11-01T08:30:00Z',
-    reminders: { reminder24h: true, reminder1h: true, reminder10m: true },
-    status: 'confirmed',
-  },
-  {
-    id: 'bk-demo-02',
-    slotId: '2026-11-05_18-20',
-    dateString: '2026-11-05',
-    startTime: '18:20',
-    endTime: '18:40',
-    formattedTime: '6:20 PM - 6:40 PM',
-    timeZone: 'Asia/Kolkata',
-    clientName: 'Elena Rostova',
-    clientEmail: 'elena@cloudscale.tech',
-    topic: 'corporate-training',
-    topicTitle: 'Corporate AI Training & Upskilling',
-    company: 'CloudScale Global',
-    notes: 'Planning a 3-day enterprise AI hands-on workshop for 40 senior engineers.',
-    googleMeetLink: generateGoogleMeetLink('elena-training'),
-    createdAt: '2026-11-01T14:15:00Z',
-    reminders: { reminder24h: true, reminder1h: true, reminder10m: true },
-    status: 'confirmed',
-  },
-];
+// Old builds seeded fake demo bookings into every visitor's browser; purge them.
+const LEGACY_DEMO_IDS = new Set(['bk-demo-01', 'bk-demo-02']);
 
 export function getStoredProfile(): ConsultantProfile {
   try {
@@ -93,13 +54,11 @@ export function saveProfile(profile: ConsultantProfile): void {
 export function getStoredBookings(): Booking[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(INITIAL_DEMO_BOOKINGS));
-      return INITIAL_DEMO_BOOKINGS;
-    }
-    return JSON.parse(raw);
+    if (!raw) return [];
+    const parsed: Booking[] = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((b) => !LEGACY_DEMO_IDS.has(b.id)) : [];
   } catch {
-    return INITIAL_DEMO_BOOKINGS;
+    return [];
   }
 }
 

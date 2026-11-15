@@ -1,4 +1,5 @@
 import { TimeSlot, Booking } from '../types';
+import { parseSlotDateTime } from './calendarUtils';
 
 /**
  * Formats a 24-hour time "HH:mm" into a 12-hour human readable time "h:mm AM/PM".
@@ -111,7 +112,8 @@ export function generateRangeSlots(
 export function generateSlotsForDate(
   dateInput: Date | string,
   existingBookings: Booking[] = [],
-  referenceNow: Date = new Date()
+  referenceNow: Date = new Date(),
+  busyIntervals: { start: number; end: number }[] = []
 ): TimeSlot[] {
   const dateObj = typeof dateInput === 'string' 
     ? new Date(`${dateInput}T00:00:00`) 
@@ -146,31 +148,19 @@ export function generateSlotsForDate(
       .map((b) => b.slotId)
   );
 
-  // Check past status
-  const now = referenceNow;
-  const nowYear = now.getFullYear();
-  const nowMonth = String(now.getMonth() + 1).padStart(2, '0');
-  const nowDay = String(now.getDate()).padStart(2, '0');
-  const todayDateString = `${nowYear}-${nowMonth}-${nowDay}`;
-  const isToday = dateString === todayDateString;
-  const isPastDay = dateString < todayDateString;
+  // A slot is "past" once its start instant (in IST) has passed – correct in any browser time zone
+  const nowMs = referenceNow.getTime();
 
   return rawSlots.map((slot) => {
-    let isPast = isPastDay;
-    if (isToday) {
-      const [slotH, slotM] = slot.startTime.split(':').map(Number);
-      const slotTimeDate = new Date(nowYear, now.getMonth(), now.getDate(), slotH, slotM);
-      // Night slots starting with 00:xx or 01:xx on same day actually belong to the late night session
-      if (slot.period === 'night' && slotH < 6) {
-        // Next day early morning: add 1 day
-        slotTimeDate.setDate(slotTimeDate.getDate() + 1);
-      }
-      isPast = slotTimeDate.getTime() <= now.getTime();
-    }
+    const startMs = parseSlotDateTime(slot.dateString, slot.startTime).getTime();
+    const endMs = startMs + 20 * 60 * 1000;
+    const isPast = startMs <= nowMs;
+    // Busy times from Ramesh's Google Calendar (live mode) block overlapping slots
+    const isBusy = busyIntervals.some((b) => startMs < b.end && endMs > b.start);
 
     return {
       ...slot,
-      isBooked: bookedSlotIds.has(slot.id),
+      isBooked: bookedSlotIds.has(slot.id) || isBusy,
       isPast,
     };
   });

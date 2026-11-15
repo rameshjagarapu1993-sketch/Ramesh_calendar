@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -29,6 +29,7 @@ import {
   cancelBooking,
   deleteBooking,
   getStoredHostAuth,
+  getStoredHostPin,
   setStoredHostAuth,
 } from './utils/storage';
 
@@ -42,6 +43,20 @@ import { EmailModal } from './components/EmailModal';
 import { ShareModal } from './components/ShareModal';
 import { VercelGuideModal } from './components/VercelGuideModal';
 import { HostLoginModal } from './components/HostLoginModal';
+import { fetchBusy, isLiveMode, toYmd, BusyInterval } from './utils/api';
+
+/** Default to the visitor's own time zone so slots show in their local time. */
+function detectTimeZone(): string {
+  try {
+    let tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!tz) return 'Asia/Kolkata';
+    if (tz === 'Asia/Calcutta') tz = 'Asia/Kolkata'; // Chrome still reports India's legacy zone name
+    if (!TIMEZONES.some((t) => t.value === tz)) TIMEZONES.push({ label: `${tz.replace(/_/g, ' ')} (your time)`, value: tz });
+    return tz;
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
 
 export default function App() {
   const [profile] = useState<ConsultantProfile>(getStoredProfile);
@@ -52,8 +67,8 @@ export default function App() {
   const [isHostAuthenticated, setIsHostAuthenticated] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const urlParams = new URLSearchParams(window.location.search);
-    const pinParam = urlParams.get('pin') || urlParams.get('admin');
-    if (pinParam === '1993' || pinParam === 'true') {
+    const pinParam = urlParams.get('pin');
+    if (pinParam && pinParam === getStoredHostPin()) {
       setStoredHostAuth(true);
       return true;
     }
@@ -62,7 +77,7 @@ export default function App() {
   const [isHostLoginModalOpen, setIsHostLoginModalOpen] = useState(false);
 
   // Timezone selection
-  const [selectedTimeZone, setSelectedTimeZone] = useState<string>('Asia/Kolkata');
+  const [selectedTimeZone, setSelectedTimeZone] = useState<string>(detectTimeZone);
 
   // Date & Slot Selection
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -83,16 +98,40 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isVercelGuideOpen, setIsVercelGuideOpen] = useState(false);
 
+  // Busy times from Ramesh's real Google Calendar (live mode only)
+  const [busy, setBusy] = useState<BusyInterval[]>([]);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const busyYear = selectedDate.getFullYear();
+  const busyMonth = selectedDate.getMonth();
+
+  const refreshBusy = useCallback(async () => {
+    if (!isLiveMode()) return;
+    // whole visible month, plus one day either side for time-zone spill-over
+    const from = new Date(busyYear, busyMonth, 0);
+    const to = new Date(busyYear, busyMonth + 1, 1);
+    try {
+      setBusy(await fetchBusy(toYmd(from), toYmd(to)));
+      setAvailabilityError(null);
+    } catch {
+      setAvailabilityError('Could not load live availability. Some slots shown as free may already be taken.');
+    }
+  }, [busyYear, busyMonth]);
+
+  useEffect(() => {
+    refreshBusy();
+  }, [refreshBusy]);
+
   // Generate slots dynamically for the selected date
   const dateSlots = useMemo(() => {
-    return generateSlotsForDate(selectedDate, bookings);
-  }, [selectedDate, bookings]);
+    return generateSlotsForDate(selectedDate, bookings, new Date(), busy);
+  }, [selectedDate, bookings, busy]);
 
   // Handle slot selection
   const handleSelectSlot = (slot: TimeSlot) => {
     if (slot.isBooked || slot.isPast) return;
     setSelectedSlot(slot);
     setBookingStep('form');
+    refreshBusy(); // re-check right before the learner fills in the form
   };
 
   // Submit new booking
@@ -101,6 +140,7 @@ export default function App() {
     setBookings(getStoredBookings());
     setLastConfirmedBooking(newBooking);
     setBookingStep('confirmed');
+    refreshBusy();
   };
 
   // Cancel booking
@@ -150,6 +190,15 @@ export default function App() {
         onHostLogout={handleHostLogout}
         onOpenHostLogin={() => setIsHostLoginModalOpen(true)}
       />
+
+      {!isLiveMode() && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-200 text-xs text-center px-4 py-2">
+          Demo mode: the booking backend is not connected, so no real Google Meet room or calendar invite is created.
+          {isHostAuthenticated && (
+            <> Set <code className="font-mono">VITE_BOOKING_API_URL</code> (see backend/SETUP.md).</>
+          )}
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -307,6 +356,7 @@ export default function App() {
                     timeZone={selectedTimeZone}
                     onSubmitBooking={handleCompleteBooking}
                     onCancel={() => setBookingStep('select')}
+                    onSlotTaken={refreshBusy}
                   />
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -329,7 +379,11 @@ export default function App() {
                         selectedSlot={selectedSlot}
                         onSelectSlot={handleSelectSlot}
                         timeZoneLabel={timeZoneLabel}
+                        timeZone={selectedTimeZone}
                       />
+                      {availabilityError && (
+                        <p className="mt-2 text-[11px] text-amber-300">{availabilityError}</p>
+                      )}
                     </div>
                   </div>
                 )}
